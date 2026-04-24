@@ -212,8 +212,11 @@ func main() {
 
 	outLabel := widget.NewLabel("(ยังไม่เลือก — จะใช้ Desktop อัตโนมัติ)")
 	outLabel.Truncation = fyne.TextTruncateEllipsis
+	outLabel.Alignment = fyne.TextAlignCenter
 
 	statusLabel := widget.NewLabel("พร้อมใช้งาน ✨")
+	statusLabel.Alignment = fyne.TextAlignCenter
+
 	statusLabel.Wrapping = fyne.TextWrapWord
 	globalProgress := widget.NewProgressBar()
 
@@ -341,7 +344,7 @@ func main() {
 		refreshList()
 	})
 
-	chooseOutBtn := widget.NewButtonWithIcon("📁 เลือกที่บันทึก PDF", theme.FolderIcon(), func() {
+	chooseOutBtn := NewButtonWithIcon(tr, "Choose where to save the PDF", theme.FolderIcon(), func() {
 		dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
 			if err == nil && u != nil {
 				outputDir = u.Path()
@@ -350,7 +353,7 @@ func main() {
 		}, w)
 	})
 
-	convertBtn := widget.NewButtonWithIcon("แปลงทั้งหมดเป็น PDF  ", theme.MediaPlayIcon(), nil)
+	convertBtn := NewButtonWithIcon(tr, "Convert all to PDF", theme.MediaPlayIcon(), nil)
 	convertBtn.Importance = widget.HighImportance
 
 	convertBtn.OnTapped = func() {
@@ -361,7 +364,7 @@ func main() {
 		}
 		if len(folders) == 0 {
 			mu.Unlock()
-			dialog.ShowInformation("แจ้งเตือน", "กรุณาเพิ่ม Folder ก่อน", w)
+			dialog.ShowInformation("warn", "Please add the folder first.", w)
 			return
 		}
 		if outputDir == "" {
@@ -389,7 +392,7 @@ func main() {
 
 			for fi, fe := range snapshot {
 				for i := range fe.statuses {
-					fe.statuses[i] = "⏳ รอ"
+					fe.statuses[i] = "⏳ Wait"
 				}
 				fe.done = false
 				fe.errMsg = ""
@@ -397,13 +400,13 @@ func main() {
 
 				imgs, err := collectImages(fe.path)
 				if err != nil || len(imgs) == 0 {
-					fe.errMsg = "ไม่พบภาพ"
+					fe.errMsg = "images not found"
 					refreshList()
 					continue
 				}
 				fe.statuses = make([]string, len(imgs))
 				for i := range fe.statuses {
-					fe.statuses[i] = "⏳ รอ"
+					fe.statuses[i] = "⏳ Wait"
 				}
 				fe.imgCount = len(imgs)
 
@@ -411,7 +414,7 @@ func main() {
 
 				fyne.Do(func() {
 					statusLabel.SetText(fmt.Sprintf(
-						"[%d/%d] 📂 %s  –  %d ภาพ",
+						"[%d/%d] 📂 %s  –  %d image",
 						fi+1, totalFolders, fe.name, len(imgs),
 					))
 					globalProgress.SetValue(float64(fi) / float64(totalFolders))
@@ -444,14 +447,17 @@ func main() {
 		}()
 	}
 
+	abbtn := widget.NewButton("!", func() {
+		dialog.ShowInformation("about", "pdf_nwk v2.1.0\nGolang + fyne\n\nโปรแกรมแปลงรูปภาพเป็น pdf (เร็วมาก กินแรมน้อย)\nจริงๆสร้างมาเพื่ออ่านการ์ตูน รองรับ 1 - หลายพันรูป\nคู่มือการใช้ รวมถึงเวอร์ชันใหม่ๆเข้าไปดูได้ในที่ github ด้านล่าง\nคลิกเข้าไปที่แท็บ Repositories แล้วหาชื่อโปรแกรม\n\nBy nawakarit - เจช์ (วัดดงหมี)\nhttps://github.com/nawakarit-VOID\n© 2026", w)
+	})
 	// ============================================================================
 	// จัดวาง UI
 	// ============================================================================
-	TR := container.NewGridWrap(fyne.NewSize(49, 35), langSelect)
+	//TR := container.NewGridWrap(fyne.NewSize(49, 35), langSelect)
+	//abbtn1 := container.NewGridWrap(fyne.NewSize(10, 35), abbtn)
 
 	// ── Layout ──
-	topBar := container.NewBorder(nil, nil, nil,
-		container.NewHBox(addBtn, removeBtn, clearBtn, widget.NewSeparator(), chooseOutBtn, TR),
+	topBar := container.NewBorder(nil, nil, nil, nil,
 		container.NewVBox(dropHint, outLabel),
 	)
 
@@ -462,6 +468,9 @@ func main() {
 	bottomBar := container.NewVBox(
 		widget.NewSeparator(),
 		statusLabel,
+		container.NewCenter(container.NewHBox(addBtn, removeBtn, clearBtn, chooseOutBtn,
+			container.NewGridWrap(fyne.NewSize(49, 35), langSelect),
+			container.NewGridWrap(fyne.NewSize(10, 35), abbtn))),
 		globalProgress,
 		convertBtn,
 	)

@@ -8,6 +8,8 @@
 "Clear": "เคลียร์",
 "Convert": "แปลง",
 "No images": "ไม่มีรูปภาพ",
+"Choose where to save the PDF": "เลือกที่บันทึก PDF",
+"Convert all to PDF": "แปลงทั้งหมดเป็น PDF",
 "Arrange the images in the folder first.\nSupports .jpg, .jpeg, .png, .webp, .bmp, and .tiff files.": "จัดเรียงรูปภาพในโฟลเดอร์ก่อน\nรองรับไฟล์ .jpg, .jpeg, .png, .webp, .bmp และ .tiff",
 "Arrange the images in the folder first.": "จัดเรียงรูปภาพในโฟลเดอร์ก่อน",
 "Supports .jpg, .jpeg, .png, .webp, .bmp, and .tiff files.": "รองรับไฟล์ .jpg, .jpeg, .png, .webp, .bmp และ .tiff",

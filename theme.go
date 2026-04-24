@@ -45,7 +45,7 @@ func (m MyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Colo
 
 		// 🌈 สีหลักของแอพ
 		case theme.ColorNamePrimary: // → สีเด่น (progress bar / highlight / ปุ่มสำคัญ)
-			return color.NRGBA{109, 191, 57, 200}
+			return color.NRGBA{255, 87, 34, 200}
 
 			//🧾 Input / UI
 		case theme.ColorNameInputBackground: // → พื้นหลังช่อง input / select

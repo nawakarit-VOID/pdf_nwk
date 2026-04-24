@@ -6,6 +6,7 @@ package main
 import (
 	_ "embed"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -100,6 +101,33 @@ func NewButton(i *I18n, key string, tapped func()) *widget.Button {
 
 func (b *I18nButton) Update() {
 	b.btn.SetText(b.i.T(b.key))
+}
+
+//////////////////////////////////////////////////
+// 🔥 BUTTON With Icon
+//////////////////////////////////////////////////
+
+type I18nButtonWithIcon struct {
+	key  string
+	btn  *widget.Button
+	i    *I18n
+	icon fyne.Resource
+}
+
+func NewButtonWithIcon(i *I18n, key string, icon fyne.Resource, tapped func()) *widget.Button {
+	b := &I18nButtonWithIcon{
+		key:  key,
+		btn:  widget.NewButtonWithIcon(i.T(key), icon, tapped),
+		i:    i,
+		icon: icon,
+	}
+	i.Register(b)
+	return b.btn
+}
+
+func (b *I18nButtonWithIcon) Update() {
+	b.btn.SetText(b.i.T(b.key))
+	b.btn.SetIcon(b.icon)
 }
 
 //////////////////////////////////////////////////
