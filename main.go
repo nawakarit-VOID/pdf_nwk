@@ -34,20 +34,28 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/jpeg"
+	_ "image/png"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
+
+	"os/exec"
+
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
-type FileStatus struct {
-	Name   string
-	Status string
-}
-
-var fileStatus []FileStatus
+// ─────────────────────────────────────────────
+//  Types
+// ─────────────────────────────────────────────
 
 type Job struct {
 	index int
@@ -62,33 +70,75 @@ type Img struct {
 type Encoded struct {
 	index int
 	buf   *bytes.Buffer
-	w     float64
-	h     float64
+	w, h  float64
 }
 
-var files []string  // สร้างตัวแปร global สำหรับเก็บรายชื่อไฟล์ภาพที่ถูกโหลดเข้ามา และสถานะการทำงานของแต่ละไฟล์
-var lastScroll = -1 //ตัวแปรสำหรับเก็บ index ของไฟล์ที่ถูกเลื่อนดูล่าสุดใน list เพื่อให้ UI เลื่อนไปที่ไฟล์นั้นเมื่อมีการอัปเดตสถานะการทำงาน
+type FolderEntry struct {
+	path     string
+	name     string
+	imgCount int
+	statuses []string
+	done     bool
+	errMsg   string
+}
+
+// encodeJPEG เข้ารหัสภาพเป็น JPEG quality 90 ลงใน buffer
+func encodeJPEG(buf *bytes.Buffer, img image.Image) {
+	jpeg.Encode(buf, img, &jpeg.Options{Quality: 90}) //nolint:errcheck
+}
+
+// ─────────────────────────────────────────────
+//  Globals
+// ─────────────────────────────────────────────
 
 var jpegPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
+	New: func() any { return new(bytes.Buffer) },
 }
 
-func updateStatus(index int, text string, list *widget.List) {
+var imageExts = map[string]bool{
+	".jpg": true, ".jpeg": true, ".png": true,
+	".gif": true, ".webp": true, ".bmp": true,
+	".tiff": true, ".tif": true,
+}
 
-	fyne.Do(func() {
+func isImage(name string) bool {
+	return imageExts[strings.ToLower(filepath.Ext(name))]
+}
 
-		fileStatus[index].Status = text
+// ─────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────
 
-		list.Refresh()
+func collectImages(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && isImage(e.Name()) {
+			out = append(out, filepath.Join(dir, e.Name()))
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
 
-		// เลื่อนไปที่ไฟล์ที่กำลังทำงาน
-		list.ScrollTo(index)
-		lastScroll = index
+func updateStatus(index int, status string, statuses []string) {
+	if index >= 0 && index < len(statuses) {
+		statuses[index] = status
+	}
+}
 
-	})
-
+func openFolder(path string) {
+	switch runtime.GOOS {
+	case "linux":
+		exec.Command("xdg-open", path).Start()
+	case "darwin":
+		exec.Command("open", path).Start()
+	case "windows":
+		exec.Command("explorer", path).Start()
+	}
 }
 
 // โหลด icon
@@ -113,11 +163,6 @@ func loadIcon(size int) fyne.Resource {
 //go:embed icons/*
 var iconFS embed.FS
 
-//   //go:embed assets/background/bgW.png
-//var bgW []byte
-
-//var resLight = fyne.NewStaticResource("bgW.png", bgW)
-
 //go:embed assets/font/Itim-Regular.ttf
 var fontItim []byte
 var myFont = fyne.NewStaticResource("Itim-Regular.ttf", fontItim)
@@ -134,20 +179,12 @@ var thJSON []byte
 // ฟังก์ชันสำหรับอัปเดตข้อความแสดงความเร็ว CPU//////////////////////////////////////////////////////////////////////////////////////
 func main() {
 
-	a := app.NewWithID("com.nawakarit.ipdf")
+	a := app.NewWithID("com.nawakarit.pdf_nwk")
 	icon := loadIcon(64) //เอา data มาใช้
-	w := a.NewWindow("ipdf")
+	w := a.NewWindow("pdf_nwk")
 	w.SetIcon(icon)
 	a.Settings().SetTheme(&MyTheme{})
 
-	//bg := canvas.NewImageFromResource(resLight)
-	//bg.FillMode = canvas.ImageFillCover
-
-	/*
-		Stretch → ยืดเต็ม (อาจเบี้ยว)
-		Contain → ไม่เบี้ยว แต่มีขอบ
-		Cover → เต็มจอ + ไม่เบี้ยว
-	*/
 	// ============================================================================
 	// เปลี่ยนภาษา
 	// ============================================================================
@@ -165,176 +202,278 @@ func main() {
 	})
 	langSelect.SetSelected("en")
 
-	// UI
+	var mu sync.Mutex
+	var folders []*FolderEntry
+	outputDir := ""
+	converting := false
 
-	// สร้าง progress bar และ label สำหรับแสดงสถานะการทำงาน
-	progress := widget.NewProgressBar()
-	progress.SetValue(0)
+	outLabel := widget.NewLabel("(ยังไม่เลือก — จะใช้ Desktop อัตโนมัติ)")
+	outLabel.Truncation = fyne.TextTruncateEllipsis
 
-	status := NewLabel(tr, "No images")
+	statusLabel := widget.NewLabel("พร้อมใช้งาน ✨")
+	statusLabel.Wrapping = fyne.TextWrapWord
+	globalProgress := widget.NewProgressBar()
 
-	// ============================================================================
-	// list widget
-	// ============================================================================
-	// สร้าง list widget สำหรับแสดงชื่อไฟล์ภาพและสถานะการทำงานของแต่ละไฟล์ โดยใช้ข้อมูลจาก fileStatus
-	// ซึ่งเป็น slice ของ FileStatus struct ที่เก็บชื่อไฟล์และสถานะการทำงานของแต่ละไฟล์
-
-	fileList := widget.NewList(
-
+	// ── Folder list ──
+	folderList := widget.NewList(
 		func() int {
-			return len(fileStatus)
+			mu.Lock()
+			defer mu.Unlock()
+			return len(folders)
 		},
-
 		func() fyne.CanvasObject {
-			return widget.NewLabel("template")
-		},
-
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-
-			fs := fileStatus[i]
-
-			o.(*widget.Label).SetText(
-				fmt.Sprintf("%03d  %-25s %s",
-					i+1,
-					fs.Name,
-					fs.Status,
-				),
+			nameLabel := widget.NewLabel("")
+			nameLabel.TextStyle = fyne.TextStyle{Bold: true}
+			stLabel := widget.NewLabel("")
+			return container.NewBorder(nil, nil,
+				widget.NewIcon(theme.FolderIcon()), stLabel,
+				nameLabel,
 			)
-
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			mu.Lock()
+			defer mu.Unlock()
+			if int(id) >= len(folders) {
+				return
+			}
+			e := folders[id]
+			c := obj.(*fyne.Container)
+			c.Objects[0].(*widget.Label).SetText(
+				fmt.Sprintf("%s  [%d ภาพ]", e.name, e.imgCount),
+			)
+			var st string
+			switch {
+			case e.errMsg != "":
+				st = "❌ " + e.errMsg
+			case e.done:
+				st = "✅ เสร็จ"
+			default:
+				n := 0
+				for _, s := range e.statuses {
+					if strings.HasPrefix(s, "✅") {
+						n++
+					}
+				}
+				if n > 0 {
+					st = fmt.Sprintf("🔄 %d/%d", n, e.imgCount)
+				} else {
+					st = "⏳ รอ"
+				}
+			}
+			c.Objects[2].(*widget.Label).SetText(st)
 		},
 	)
 
-	fileListContainer := container.NewVScroll(fileList)
+	refreshList := func() { fyne.Do(func() { folderList.Refresh() }) }
 
-	fileListContainer.SetMinSize(fyne.NewSize(250, 250))
-
-	maxCPU := runtime.NumCPU() //จำนวน CPU สูงสุดของเครื่องที่สามารถใช้ได้ (เช่น 4, 8, 16 cores)
-
-	// ============================================================================
-	// เลือกแฟ้ม
-	// ============================================================================
-	selectBtn := NewButton(tr, "Select Folder", func() {
-
-		fd := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
-
-			//if uri == nil {
-			//	return
-			//}
-			if err != nil || uri == nil {
-				return
-			}
-
-			files = nil
-
-			list, err := os.ReadDir(uri.Path())
-			if err != nil {
-				dialog.ShowError(err, w)
-				return
-			}
-
-			validExt := map[string]bool{
-				".jpg": true, ".jpeg": true, ".png": true,
-				".webp": true, ".bmp": true, ".tiff": true,
-			}
-
-			for _, f := range list {
-				ext := strings.ToLower(filepath.Ext(f.Name()))
-				if validExt[ext] {
-					files = append(files, filepath.Join(uri.Path(), f.Name()))
-				}
-			}
-
-			sort.Strings(files)
-
-			fileStatus = nil
-
-			fmt.Println("FILES COUNT:", len(files))
-			for _, f := range files {
-				fmt.Println("FILE:", f)
-
-				fileStatus = append(fileStatus, FileStatus{
-					Name:   filepath.Base(f),
-					Status: "🎨 image",
-				})
-
-			}
-
-			fileList.Refresh()
-			fmt.Println("files count:", len(files))
-			status.SetText(fmt.Sprintf("Loaded %d images", len(files)))
-
-		}, w)
-
-		fd.Resize(fyne.NewSize(800, 600))
-		if l, err := storage.ListerForURI(storage.NewFileURI("/media")); err == nil {
-			fd.SetLocation(l)
-		} else if l, err := storage.ListerForURI(storage.NewFileURI("/mnt")); err == nil {
-			fd.SetLocation(l)
+	addFolderPaths := func(paths []string) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen := map[string]bool{}
+		for _, fe := range folders {
+			seen[fe.path] = true
 		}
-		fd.Show()
+		for _, p := range paths {
+			if seen[p] {
+				continue
+			}
+			info, err := os.Stat(p)
+			if err != nil || !info.IsDir() {
+				continue
+			}
+			imgs, err := collectImages(p)
+			if err != nil || len(imgs) == 0 {
+				continue
+			}
+			st := make([]string, len(imgs))
+			for i := range st {
+				st[i] = "⏳ รอ"
+			}
+			folders = append(folders, &FolderEntry{
+				path: p, name: filepath.Base(p),
+				imgCount: len(imgs), statuses: st,
+			})
+			seen[p] = true
+		}
+		refreshList()
+	}
 
+	// Drag & Drop
+	w.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
+		var paths []string
+		for _, u := range uris {
+			paths = append(paths, u.Path())
+		}
+		addFolderPaths(paths)
 	})
-	//selectBtn.Importance = widget.HighImportance //ตั้งค่าความสำคัญของปุ่มเป็น High เพื่อให้มีสีและดูโดดเด่นมากขึ้น
 
-	//ปุ่มเคลียร์รายการภาพที่โหลดเข้ามา
-	clearBtn := NewButton(tr, "Clear", func() {
+	dropHint := widget.NewLabel("⬇  ลาก Folder มาวางที่หน้าต่างนี้ได้เลย (รองรับหลาย Folder พร้อมกัน)")
+	dropHint.Alignment = fyne.TextAlignCenter
 
-		files = nil
-		fileStatus = nil
-
-		progress.SetValue(0)
-
-		status.SetText("No images")
-
+	addBtn := widget.NewButtonWithIcon("เพิ่ม Folder", theme.FolderOpenIcon(), func() {
+		dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
+			if err == nil && u != nil {
+				addFolderPaths([]string{u.Path()})
+			}
+		}, w)
 	})
-	//clearBtn.Importance = widget.DangerImportance //ตั้งค่าความสำคัญของปุ่มเป็น Danger เพื่อให้มีสีแดงและดูโดดเด่นมากขึ้น
 
-	//ปุ่มเริ่มแปลง
-	convertBtn := NewButton(tr, "Convert", func() {
+	selectedID := -1
+	folderList.OnSelected = func(id widget.ListItemID) { selectedID = int(id) }
 
-		if len(files) == 0 {
-			status.SetText("No images")
+	removeBtn := widget.NewButtonWithIcon("ลบที่เลือก", theme.DeleteIcon(), func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if selectedID >= 0 && selectedID < len(folders) {
+			folders = append(folders[:selectedID], folders[selectedID+1:]...)
+			selectedID = -1
+			refreshList()
+		}
+	})
+
+	clearBtn := widget.NewButtonWithIcon("ล้างทั้งหมด", theme.CancelIcon(), func() {
+		mu.Lock()
+		folders = nil
+		mu.Unlock()
+		refreshList()
+	})
+
+	chooseOutBtn := widget.NewButtonWithIcon("📁 เลือกที่บันทึก PDF", theme.FolderIcon(), func() {
+		dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
+			if err == nil && u != nil {
+				outputDir = u.Path()
+				outLabel.SetText("📁 " + outputDir)
+			}
+		}, w)
+	})
+
+	convertBtn := widget.NewButtonWithIcon("  ▶  แปลงทั้งหมดเป็น PDF  ", theme.MediaPlayIcon(), nil)
+	convertBtn.Importance = widget.HighImportance
+
+	convertBtn.OnTapped = func() {
+		mu.Lock()
+		if converting {
+			mu.Unlock()
 			return
 		}
+		if len(folders) == 0 {
+			mu.Unlock()
+			dialog.ShowInformation("แจ้งเตือน", "กรุณาเพิ่ม Folder ก่อน", w)
+			return
+		}
+		if outputDir == "" {
+			home, _ := os.UserHomeDir()
+			desktop := filepath.Join(home, "Desktop")
+			if _, err := os.Stat(desktop); err == nil {
+				outputDir = desktop
+			} else {
+				outputDir = home
+			}
+			outLabel.SetText("📁 " + outputDir)
+		}
+		snapshot := make([]*FolderEntry, len(folders))
+		copy(snapshot, folders)
+		outDir := outputDir
+		converting = true
+		mu.Unlock()
 
-		save := dialog.NewFileSave(func(uc fyne.URIWriteCloser, err error) {
+		convertBtn.Disable()
+		globalProgress.SetValue(0)
 
-			if uc == nil {
-				return
+		go func() {
+			cores := runtime.NumCPU()
+			totalFolders := len(snapshot)
+
+			for fi, fe := range snapshot {
+				for i := range fe.statuses {
+					fe.statuses[i] = "⏳ รอ"
+				}
+				fe.done = false
+				fe.errMsg = ""
+				refreshList()
+
+				imgs, err := collectImages(fe.path)
+				if err != nil || len(imgs) == 0 {
+					fe.errMsg = "ไม่พบภาพ"
+					refreshList()
+					continue
+				}
+				fe.statuses = make([]string, len(imgs))
+				for i := range fe.statuses {
+					fe.statuses[i] = "⏳ รอ"
+				}
+				fe.imgCount = len(imgs)
+
+				outPath := filepath.Join(outDir, fe.name+".pdf")
+
+				fyne.Do(func() {
+					statusLabel.SetText(fmt.Sprintf(
+						"[%d/%d] 📂 %s  –  %d ภาพ",
+						fi+1, totalFolders, fe.name, len(imgs),
+					))
+					globalProgress.SetValue(float64(fi) / float64(totalFolders))
+				})
+
+				startPipeline(imgs, fe.statuses, globalProgress, statusLabel, cores, outPath, folderList)
+
+				fe.done = true
+				refreshList()
 			}
 
-			path := uc.URI().Path()
-			uc.Close()
+			mu.Lock()
+			converting = false
+			mu.Unlock()
 
-			runtime.GOMAXPROCS(maxCPU)
+			fyne.Do(func() {
+				globalProgress.SetValue(1)
+				convertBtn.Enable()
+			})
 
-			go StartPipeline(progress, status, maxCPU, path, fileList)
-
-		}, w)
-
-		save.Resize(fyne.NewSize(700, 600))
-		save.SetFileName("output.pdf")
-		save.SetFilter(storage.NewExtensionFileFilter([]string{".pdf"}))
-
-		save.Show()
-
-	})
-
-	abbtn := widget.NewButton("!", func() {
-		dialog.ShowInformation("about", "ipdf v1.2.0\nGolang + fyne\n\nโปรแกรมแปลงรูปภาพเป็น pdf (เร็วมาก กินแรมน้อย)\nจริงๆสร้างมาเพื่ออ่านการ์ตูน รองรับ 1 - หลายพันรูป\nคู่มือการใช้ รวมถึงเวอร์ชันใหม่ๆเข้าไปดูได้ในที่ github ด้านล่าง\nคลิกเข้าไปที่แท็บ Repositories แล้วหาชื่อโปรแกรม\n\nBy nawakarit - เจช์ (วัดดงหมี)\nhttps://github.com/nawakarit-VOID\n© 2026", w)
-	})
+			dialog.ShowConfirm(
+				"✅ เสร็จสิ้น!",
+				fmt.Sprintf("แปลง %d folder เสร็จแล้ว 🎉\n\nเปิด folder ที่บันทึก?", totalFolders),
+				func(open bool) {
+					if open {
+						openFolder(outDir)
+					}
+				}, w,
+			)
+		}()
+	}
 
 	// ============================================================================
 	// จัดวาง UI
 	// ============================================================================
 
+	// ── Layout ──
+	topBar := container.NewBorder(nil, nil, nil,
+		container.NewHBox(addBtn, removeBtn, clearBtn, widget.NewSeparator(), chooseOutBtn),
+		container.NewVBox(dropHint, outLabel),
+	)
+
+	listBox := container.NewBorder(topBar, nil, nil, nil,
+		container.NewScroll(folderList),
+	)
+
+	bottomBar := container.NewVBox(
+		widget.NewSeparator(),
+		statusLabel,
+		globalProgress,
+		convertBtn,
+	)
+
+	w.SetContent(container.NewBorder(nil, bottomBar, nil, nil, listBox))
+	w.ShowAndRun()
+}
+
+/*
 	labelt := NewLabel(tr, "We believe we are the fastest.")
 	labelt.Alignment = fyne.TextAlignCenter
 
 	label := NewLabel(tr, "Arrange the images in the folder first.\nSupports .jpg, .jpeg, .png, .webp, .bmp, and .tiff files.")
 	label.Alignment = fyne.TextAlignCenter
 
-	selectBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), selectBtn)
+	selectBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), )
 	clearBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), clearBtn)
 	convertBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), convertBtn)
 
@@ -345,9 +484,9 @@ func main() {
 		nil,
 		container.NewCenter(container.NewHBox(selectBtn1, clearBtn1, convertBtn1)))
 
-	prog := container.NewGridWrap(fyne.NewSize(395, 35), progress)
+	prog := container.NewGridWrap(fyne.NewSize(395, 35), )
 	TR := container.NewGridWrap(fyne.NewSize(49, 35), langSelect)
-	abbtn1 := container.NewGridWrap(fyne.NewSize(10, 35), abbtn)
+	abbtn1 := container.NewGridWrap(fyne.NewSize(10, 35), )
 
 	ProgressTR := container.NewBorder(
 		nil, nil, nil, nil,
@@ -356,7 +495,7 @@ func main() {
 	top := container.NewVBox(
 
 		labelt, label, input1, ProgressTR,
-		container.NewCenter(status),
+		container.NewCenter(),
 	)
 
 	content := container.NewBorder(
@@ -364,7 +503,7 @@ func main() {
 		nil,               //ล่าง
 		nil,               // ซ้าย
 		nil,               //ขวา
-		fileListContainer, // กลาง
+		 // กลาง
 	)
 
 	ui := container.NewStack(
@@ -379,3 +518,6 @@ func main() {
 	//w.SetFixedSize(true)
 	w.ShowAndRun()
 }
+
+
+*/
