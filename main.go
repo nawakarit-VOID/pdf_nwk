@@ -82,9 +82,9 @@ type FolderEntry struct {
 	errMsg   string
 }
 
-// encodeJPEG เข้ารหัสภาพเป็น JPEG quality 90 ลงใน buffer
+// encodeJPEG เข้ารหัสภาพเป็น JPEG quality 100 ลงใน buffer
 func encodeJPEG(buf *bytes.Buffer, img image.Image) {
-	jpeg.Encode(buf, img, &jpeg.Options{Quality: 90}) //nolint:errcheck
+	jpeg.Encode(buf, img, &jpeg.Options{Quality: 100}) //nolint:errcheck
 }
 
 // ─────────────────────────────────────────────
@@ -185,7 +185,7 @@ func main() {
 	w.SetIcon(icon)
 	a.Settings().SetTheme(&MyTheme{})
 
-	w.Resize(fyne.NewSize(760, 620))
+	w.Resize(fyne.NewSize(760, 520))
 
 	// ============================================================================
 	// เปลี่ยนภาษา
@@ -210,11 +210,11 @@ func main() {
 	outputDir := ""
 	converting := false
 
-	outLabel := widget.NewLabel("(ยังไม่เลือก — จะใช้ Desktop อัตโนมัติ)")
+	outLabel := NewLabel(tr, "No save location yet")
 	outLabel.Truncation = fyne.TextTruncateEllipsis
 	outLabel.Alignment = fyne.TextAlignCenter
 
-	statusLabel := widget.NewLabel("พร้อมใช้งาน ✨")
+	statusLabel := NewLabel(tr, "Ready")
 	statusLabel.Alignment = fyne.TextAlignCenter
 
 	statusLabel.Wrapping = fyne.TextWrapWord
@@ -252,7 +252,7 @@ func main() {
 			case e.errMsg != "":
 				st = "❌ " + e.errMsg
 			case e.done:
-				st = "✅ เสร็จ"
+				st = "✅ Done"
 			default:
 				n := 0
 				for _, s := range e.statuses {
@@ -263,7 +263,7 @@ func main() {
 				if n > 0 {
 					st = fmt.Sprintf("🔄 %d/%d", n, e.imgCount)
 				} else {
-					st = "⏳ รอ"
+					st = "⏳ Wait"
 				}
 			}
 			c.Objects[2].(*widget.Label).SetText(st)
@@ -293,7 +293,7 @@ func main() {
 			}
 			st := make([]string, len(imgs))
 			for i := range st {
-				st[i] = "⏳ รอ"
+				st[i] = "⏳ Wait"
 			}
 			folders = append(folders, &FolderEntry{
 				path: p, name: filepath.Base(p),
@@ -316,7 +316,7 @@ func main() {
 	dropHint := NewLabel(tr, "Drag and drop")
 	dropHint.Alignment = fyne.TextAlignCenter
 
-	addBtn := widget.NewButtonWithIcon("เพิ่ม Folder", theme.FolderOpenIcon(), func() {
+	addBtn := NewButtonWithIcon(tr, "Add Folder", theme.FolderOpenIcon(), func() {
 		dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
 			if err == nil && u != nil {
 				addFolderPaths([]string{u.Path()})
@@ -327,7 +327,7 @@ func main() {
 	selectedID := -1
 	folderList.OnSelected = func(id widget.ListItemID) { selectedID = int(id) }
 
-	removeBtn := widget.NewButtonWithIcon("ลบที่เลือก", theme.DeleteIcon(), func() {
+	removeBtn := NewButtonWithIcon(tr, "Delete Selected", theme.DeleteIcon(), func() {
 		mu.Lock()
 		defer mu.Unlock()
 		if selectedID >= 0 && selectedID < len(folders) {
@@ -337,7 +337,7 @@ func main() {
 		}
 	})
 
-	clearBtn := widget.NewButtonWithIcon("ล้างทั้งหมด", theme.CancelIcon(), func() {
+	clearBtn := NewButtonWithIcon(tr, "Clear All", theme.CancelIcon(), func() {
 		mu.Lock()
 		folders = nil
 		mu.Unlock()
