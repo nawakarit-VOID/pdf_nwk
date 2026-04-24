@@ -185,6 +185,8 @@ func main() {
 	w.SetIcon(icon)
 	a.Settings().SetTheme(&MyTheme{})
 
+	w.Resize(fyne.NewSize(760, 620))
+
 	// ============================================================================
 	// เปลี่ยนภาษา
 	// ============================================================================
@@ -202,6 +204,7 @@ func main() {
 	})
 	langSelect.SetSelected("en")
 
+	//สถานะ
 	var mu sync.Mutex
 	var folders []*FolderEntry
 	outputDir := ""
@@ -307,7 +310,7 @@ func main() {
 		addFolderPaths(paths)
 	})
 
-	dropHint := widget.NewLabel("⬇  ลาก Folder มาวางที่หน้าต่างนี้ได้เลย (รองรับหลาย Folder พร้อมกัน)")
+	dropHint := NewLabel(tr, "Drag and drop")
 	dropHint.Alignment = fyne.TextAlignCenter
 
 	addBtn := widget.NewButtonWithIcon("เพิ่ม Folder", theme.FolderOpenIcon(), func() {
@@ -347,7 +350,7 @@ func main() {
 		}, w)
 	})
 
-	convertBtn := widget.NewButtonWithIcon("  ▶  แปลงทั้งหมดเป็น PDF  ", theme.MediaPlayIcon(), nil)
+	convertBtn := widget.NewButtonWithIcon("แปลงทั้งหมดเป็น PDF  ", theme.MediaPlayIcon(), nil)
 	convertBtn.Importance = widget.HighImportance
 
 	convertBtn.OnTapped = func() {
@@ -444,10 +447,11 @@ func main() {
 	// ============================================================================
 	// จัดวาง UI
 	// ============================================================================
+	TR := container.NewGridWrap(fyne.NewSize(49, 35), langSelect)
 
 	// ── Layout ──
 	topBar := container.NewBorder(nil, nil, nil,
-		container.NewHBox(addBtn, removeBtn, clearBtn, widget.NewSeparator(), chooseOutBtn),
+		container.NewHBox(addBtn, removeBtn, clearBtn, widget.NewSeparator(), chooseOutBtn, TR),
 		container.NewVBox(dropHint, outLabel),
 	)
 

@@ -1,8 +1,9 @@
 {
-  "open_file": "Open File",
-  "exit": "Exit",
-  "welcome": "Hello %s",
-    "bye": "Bye",
+"Drag and drop": "⬇ Drag and drop the folder onto this window (multiple folders can be added simultaneously)",
+"open_file": "Open File",
+"exit": "Exit",
+"welcome": "Hello %s",
+"bye": "Bye",
 "Select Folder": "Select Folder",
 "Clear": "Clear",
 "Convert": "Convert",
