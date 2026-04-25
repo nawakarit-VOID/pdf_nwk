@@ -13,7 +13,7 @@
 "Add Folder": "Add Folder",
 "Delete Selected": "Delete Selected",
 "Clear All": "Clear All",
-"Choose where to save the PDF": "Choose where to save the PDF",
+"Choose where to save the PDF": "Choose to save",
 "Convert all to PDF": "Convert all to PDF",
   "about_title": "About",
   "about_msg": "pdf_nwk v2.1.0\nGolang + fyne\n\nImage to PDF converter (very fast, low RAM usage)\nActually created for reading comics, supports 1 - thousands of images\nUser manual and newer versions can be found on GitHub below\nClick on the Repositories tab and find the program name\n\nBy nawakarit - เจช์ (วัดดงหมี)\nhttps://github.com/nawakarit-VOID\n© 2026"

@@ -438,7 +438,7 @@ func main() {
 			})
 
 			dialog.ShowConfirm(
-				"✅ เสร็จสิ้น!",
+				"✅ Finish!",
 				fmt.Sprintf("Convert %d folder finished 🎉\n\nopen folder ?", totalFolders),
 				func(open bool) {
 					if open {
