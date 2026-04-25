@@ -321,9 +321,10 @@ func main() {
 			if err == nil && u != nil {
 				addFolderPaths([]string{u.Path()})
 			}
-		}, w)
-	})
 
+		}, w)
+
+	})
 	selectedID := -1
 	folderList.OnSelected = func(id widget.ListItemID) { selectedID = int(id) }
 
@@ -351,6 +352,7 @@ func main() {
 				outLabel.SetText("📁 " + outputDir)
 			}
 		}, w)
+
 	})
 
 	convertBtn := NewButtonWithIcon(tr, "Convert all to PDF", theme.MediaPlayIcon(), nil)
