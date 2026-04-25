@@ -7,11 +7,12 @@ import (
 	_ "embed"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
 
 //////////////////////////////////////////////////
-// 🔥 I18N CORE
+//  I18N CORE
 //////////////////////////////////////////////////
 
 type TranslatableItem interface {
@@ -56,7 +57,7 @@ func (i *I18n) SetLang(lang string) {
 }
 
 //////////////////////////////////////////////////
-// 🔥 LABEL
+//  LABEL
 //////////////////////////////////////////////////
 
 type I18nLabel struct {
@@ -80,7 +81,7 @@ func (l *I18nLabel) Update() {
 }
 
 //////////////////////////////////////////////////
-// 🔥 BUTTON
+//  BUTTON
 //////////////////////////////////////////////////
 
 type I18nButton struct {
@@ -104,7 +105,7 @@ func (b *I18nButton) Update() {
 }
 
 //////////////////////////////////////////////////
-// 🔥 BUTTON With Icon
+//  BUTTON With Icon
 //////////////////////////////////////////////////
 
 type I18nButtonWithIcon struct {
@@ -131,7 +132,7 @@ func (b *I18nButtonWithIcon) Update() {
 }
 
 //////////////////////////////////////////////////
-// 🔥 SELECT (สำคัญ)
+//  SELECT (สำคัญ)
 //////////////////////////////////////////////////
 
 type I18nSelect struct {
@@ -171,4 +172,32 @@ func (s *I18nSelect) Update() {
 	}
 	s.selectW.Options = options
 	s.selectW.Refresh()
+}
+
+// ////////////////////////////////////////////////
+//
+//	Dialog //dialog.ShowInformation
+//
+// ////////////////////////////////////////////////
+type I18nDialog struct {
+	i        *I18n
+	titleKey string
+	msgKey   string
+	win      fyne.Window
+}
+
+func (d *I18nDialog) Show() {
+	dialog.ShowInformation(
+		d.i.T(d.titleKey),
+		d.i.T(d.msgKey),
+		d.win,
+	)
+}
+
+func ShowInformation(i *I18n, win fyne.Window, titleKey, msgKey string) {
+	dialog.ShowInformation(
+		i.T(titleKey),
+		i.T(msgKey),
+		win,
+	)
 }

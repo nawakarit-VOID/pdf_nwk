@@ -17,7 +17,7 @@ import (
 // และจัดเรียงตามลำดับ index เพื่อให้ภาพอยู่ในลำดับที่ถูกต้องใน PDF จากนั้นใช้ gofpdf
 // ในการสร้าง PDF และเพิ่มภาพลงไปทีละหน้า พร้อมอัปเดต progress bar และสถานะการทำงานใน UI
 // ─────────────────────────────────────────────
-//  writePDF  (จากโค้ดที่ให้มา)
+//  writePDF
 // ─────────────────────────────────────────────
 
 func writePDF(
@@ -92,7 +92,7 @@ func writePDF(
 	fyne.Do(func() {
 		elapsed := time.Since(start).Seconds()
 		status.SetText(fmt.Sprintf(
-			"🤖✅✅ - - Done! - - ✅✅🤖 - - - ▶️ %d images in %.1fs 🕒 (%.1f img/s)",
+			"✅Done! ▶️ %d images in %.1fs 🕒 (%.1f img/s)",
 			total, elapsed, float64(total)/elapsed,
 		))
 	})

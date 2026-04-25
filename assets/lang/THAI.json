@@ -8,15 +8,13 @@
 "Clear": "เคลียร์",
 "Convert": "แปลง",
 "No images": "ไม่มีรูปภาพ",
-"No save location yet": "ยังไม่เลือกตำแหน่งบันทึก — *ใช้ Desktop อัตโนมัติ",
+"No save location yet": "ยังไม่เลือกตำแหน่งบันทึก — *วางที่ Desktop",
 "Ready": "พร้อม ✨",
 "Add Folder": "เพิ่มแฟ้ม",
 "Delete Selected": "ลบที่เลือก",
 "Clear All": "ล้างทั้งหมด",
 "Choose where to save the PDF": "เลือกที่บันทึก PDF",
 "Convert all to PDF": "แปลงทั้งหมดเป็น PDF",
-"Arrange the images in the folder first.\nSupports .jpg, .jpeg, .png, .webp, .bmp, and .tiff files.": "จัดเรียงรูปภาพในโฟลเดอร์ก่อน\nรองรับไฟล์ .jpg, .jpeg, .png, .webp, .bmp และ .tiff",
-"Arrange the images in the folder first.": "จัดเรียงรูปภาพในโฟลเดอร์ก่อน",
-"Supports .jpg, .jpeg, .png, .webp, .bmp, and .tiff files.": "รองรับไฟล์ .jpg, .jpeg, .png, .webp, .bmp และ .tiff",
-"We believe we are the fastest.": "เราเชื่อว่าเราเร็วที่สุด (มั้ง)"
+  "about_title": "เกี่ยวกับ",
+  "about_msg": "pdf_nwk v2.1.0\nGolang + fyne\n\nโปรแกรมแปลงรูปภาพเป็น pdf (เร็วมาก กินแรมน้อย)\nจริงๆสร้างมาเพื่ออ่านการ์ตูน รองรับ 1 - หลายพันรูป\nคู่มือการใช้ รวมถึงเวอร์ชันใหม่ๆเข้าไปดูได้ในที่ github ด้านล่าง\nคลิกเข้าไปที่แท็บ Repositories แล้วหาชื่อโปรแกรม\n\nBy nawakarit - เจช์ (วัดดงหมี)\nhttps://github.com/nawakarit-VOID\n© 2026"
 }

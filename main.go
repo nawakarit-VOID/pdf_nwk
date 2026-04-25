@@ -437,7 +437,7 @@ func main() {
 
 			dialog.ShowConfirm(
 				"✅ เสร็จสิ้น!",
-				fmt.Sprintf("แปลง %d folder เสร็จแล้ว 🎉\n\nเปิด folder ที่บันทึก?", totalFolders),
+				fmt.Sprintf("Convert %d folder finished 🎉\n\nopen folder ?", totalFolders),
 				func(open bool) {
 					if open {
 						openFolder(outDir)
@@ -448,15 +448,12 @@ func main() {
 	}
 
 	abbtn := widget.NewButton("!", func() {
-		dialog.ShowInformation("about", "pdf_nwk v2.1.0\nGolang + fyne\n\nโปรแกรมแปลงรูปภาพเป็น pdf (เร็วมาก กินแรมน้อย)\nจริงๆสร้างมาเพื่ออ่านการ์ตูน รองรับ 1 - หลายพันรูป\nคู่มือการใช้ รวมถึงเวอร์ชันใหม่ๆเข้าไปดูได้ในที่ github ด้านล่าง\nคลิกเข้าไปที่แท็บ Repositories แล้วหาชื่อโปรแกรม\n\nBy nawakarit - เจช์ (วัดดงหมี)\nhttps://github.com/nawakarit-VOID\n© 2026", w)
+		ShowInformation(tr, w, "about_title", "about_msg")
 	})
+
 	// ============================================================================
 	// จัดวาง UI
 	// ============================================================================
-	//TR := container.NewGridWrap(fyne.NewSize(49, 35), langSelect)
-	//abbtn1 := container.NewGridWrap(fyne.NewSize(10, 35), abbtn)
-
-	// ── Layout ──
 	topBar := container.NewBorder(nil, nil, nil, nil,
 		container.NewVBox(dropHint, outLabel),
 	)
@@ -478,59 +475,3 @@ func main() {
 	w.SetContent(container.NewBorder(nil, bottomBar, nil, nil, listBox))
 	w.ShowAndRun()
 }
-
-/*
-	labelt := NewLabel(tr, "We believe we are the fastest.")
-	labelt.Alignment = fyne.TextAlignCenter
-
-	label := NewLabel(tr, "Arrange the images in the folder first.\nSupports .jpg, .jpeg, .png, .webp, .bmp, and .tiff files.")
-	label.Alignment = fyne.TextAlignCenter
-
-	selectBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), )
-	clearBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), clearBtn)
-	convertBtn1 := container.NewGridWrap(fyne.NewSize(150, 35), convertBtn)
-
-	input1 := container.NewBorder(
-		nil,
-		nil,
-		nil,
-		nil,
-		container.NewCenter(container.NewHBox(selectBtn1, clearBtn1, convertBtn1)))
-
-	prog := container.NewGridWrap(fyne.NewSize(395, 35), )
-	TR := container.NewGridWrap(fyne.NewSize(49, 35), langSelect)
-	abbtn1 := container.NewGridWrap(fyne.NewSize(10, 35), )
-
-	ProgressTR := container.NewBorder(
-		nil, nil, nil, nil,
-		container.NewCenter(container.NewHBox(prog, TR, abbtn1)))
-
-	top := container.NewVBox(
-
-		labelt, label, input1, ProgressTR,
-		container.NewCenter(),
-	)
-
-	content := container.NewBorder(
-		top,               //บน
-		nil,               //ล่าง
-		nil,               // ซ้าย
-		nil,               //ขวา
-		 // กลาง
-	)
-
-	ui := container.NewStack(
-		//bg, // พื้นหลัง
-		//overlay,
-		content, // UI ด้านบน
-	)
-
-	//w.SetContent(container.NewPadded(ui))
-	w.SetContent(ui)
-	w.Resize(fyne.NewSize(500, 700))
-	//w.SetFixedSize(true)
-	w.ShowAndRun()
-}
-
-
-*/
