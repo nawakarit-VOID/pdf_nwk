@@ -185,7 +185,7 @@ func main() {
 	w.SetIcon(icon)
 	a.Settings().SetTheme(&MyTheme{})
 
-	w.Resize(fyne.NewSize(760, 520))
+	w.Resize(fyne.NewSize(660, 720))
 
 	// ============================================================================
 	// เปลี่ยนภาษา
@@ -245,7 +245,7 @@ func main() {
 			e := folders[id]
 			c := obj.(*fyne.Container)
 			c.Objects[0].(*widget.Label).SetText(
-				fmt.Sprintf("%s  [%d ภาพ]", e.name, e.imgCount),
+				fmt.Sprintf("%s  [%d image]", e.name, e.imgCount),
 			)
 			var st string
 			switch {

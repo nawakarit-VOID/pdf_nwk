@@ -34,7 +34,7 @@ func (m MyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Colo
 			return color.NRGBA{255, 255, 255, 50}
 
 		case theme.ColorNameDisabledButton: //→ ปุ่มที่กดไม่ได้***
-			return color.NRGBA{255, 0, 0, 255}
+			return color.NRGBA{255, 87, 34, 255}
 
 		// 🧠 สถานะทั่วไป
 		case theme.ColorNameDisabled: // → สีของ element ที่ใช้ไม่ได้***
@@ -45,7 +45,7 @@ func (m MyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Colo
 
 		// 🌈 สีหลักของแอพ
 		case theme.ColorNamePrimary: // → สีเด่น (progress bar / highlight / ปุ่มสำคัญ)
-			return color.NRGBA{255, 87, 34, 200}
+			return color.NRGBA{255, 87, 34, 255}
 
 			//🧾 Input / UI
 		case theme.ColorNameInputBackground: // → พื้นหลังช่อง input / select
@@ -96,7 +96,7 @@ func (m MyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Colo
 			return color.NRGBA{255, 255, 255, 50}
 
 		case theme.ColorNameDisabledButton: //→ ปุ่มที่กดไม่ได้***
-			return color.NRGBA{255, 0, 0, 255}
+			return color.NRGBA{255, 87, 34, 255}
 
 		// 🧠 สถานะทั่วไป
 		case theme.ColorNameDisabled: // → สีของ element ที่ใช้ไม่ได้***
@@ -107,7 +107,7 @@ func (m MyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Colo
 
 		// 🌈 สีหลักของแอพ
 		case theme.ColorNamePrimary: // → สีเด่น (progress bar / highlight / ปุ่มสำคัญ)
-			return color.NRGBA{109, 191, 57, 200}
+			return color.NRGBA{255, 87, 34, 255}
 
 			//🧾 Input / UI
 		case theme.ColorNameInputBackground: // → พื้นหลังช่อง input / select
