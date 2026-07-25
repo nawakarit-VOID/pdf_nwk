@@ -396,11 +396,9 @@ func main() {
 			canceled := false
 
 			for fi, fe := range snapshot {
-				select {
-				case <-ctx.Done():
+				if ctx.Err() != nil {
 					canceled = true
 					break
-				default:
 				}
 
 				fe.mu.Lock()
