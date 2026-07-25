@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"os"
 	"sync"
@@ -20,6 +21,7 @@ import (
 // ─────────────────────────────────────────────
 
 func startPipeline(
+	ctx context.Context,
 	files []string,
 	fe *FolderEntry,
 	progress *widget.ProgressBar,
@@ -66,20 +68,37 @@ func startPipeline(
 		go func() {
 			defer wgDecode.Done()
 			for j := range jobs {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				f, err := os.Open(j.path)
 				if err != nil {
-					decoded <- Img{index: j.index, img: nil, err: err}
+					select {
+					case decoded <- Img{index: j.index, img: nil, err: err}:
+					case <-ctx.Done():
+						return
+					}
 					fe.UpdateStatus(j.index, "❌ open error")
 					continue
 				}
 				img, _, err := image.Decode(f)
 				f.Close()
 				if err != nil {
-					decoded <- Img{index: j.index, img: nil, err: err}
+					select {
+					case decoded <- Img{index: j.index, img: nil, err: err}:
+					case <-ctx.Done():
+						return
+					}
 					fe.UpdateStatus(j.index, "❌ decode error")
 					continue
 				}
-				decoded <- Img{index: j.index, img: img}
+				select {
+				case decoded <- Img{index: j.index, img: img}:
+				case <-ctx.Done():
+					return
+				}
 				fe.UpdateStatus(j.index, "🔀 decoding")
 			}
 		}()
@@ -91,8 +110,17 @@ func startPipeline(
 		go func() {
 			defer wgResize.Done()
 			for im := range decoded {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				if im.err != nil {
-					resized <- im
+					select {
+					case resized <- im:
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 				b := im.img.Bounds()
@@ -103,7 +131,11 @@ func startPipeline(
 					draw.BiLinear.Scale(dst, dst.Bounds(), im.img, b, draw.Over, nil)
 					im.img = dst
 				}
-				resized <- im
+				select {
+				case resized <- im:
+				case <-ctx.Done():
+					return
+				}
 				fe.UpdateStatus(im.index, "↔️ resizing")
 			}
 		}()
@@ -115,24 +147,41 @@ func startPipeline(
 		go func() {
 			defer wgEncode.Done()
 			for im := range resized {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				if im.err != nil {
-					encoded <- Encoded{index: im.index, err: im.err}
+					select {
+					case encoded <- Encoded{index: im.index, err: im.err}:
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 				buf := jpegPool.Get().(*bytes.Buffer)
 				buf.Reset()
 				err := encodeJPEG(buf, im.img)
 				if err != nil {
-					encoded <- Encoded{index: im.index, err: err}
+					select {
+					case encoded <- Encoded{index: im.index, err: err}:
+					case <-ctx.Done():
+						return
+					}
 					fe.UpdateStatus(im.index, "❌ encode error")
 					continue
 				}
 				b := im.img.Bounds()
-				encoded <- Encoded{
+				select {
+				case encoded <- Encoded{
 					index: im.index,
 					buf:   buf,
 					w:     float64(b.Dx()) * 0.264583,
 					h:     float64(b.Dy()) * 0.264583,
+				}:
+				case <-ctx.Done():
+					return
 				}
 				fe.UpdateStatus(im.index, "🔄 encoding")
 			}
@@ -142,7 +191,12 @@ func startPipeline(
 	// ---------- feed jobs ----------
 	go func() {
 		for i, f := range files {
-			jobs <- Job{index: i, path: f}
+			select {
+			case <-ctx.Done():
+				close(jobs)
+				return
+			case jobs <- Job{index: i, path: f}:
+			}
 		}
 		close(jobs)
 	}()
@@ -152,7 +206,7 @@ func startPipeline(
 	go func() { wgResize.Wait(); close(resized) }()
 	go func() { wgEncode.Wait(); close(encoded) }()
 
-	err := writePDF(encoded, total, fe, progress, status, start, output)
+	err := writePDF(ctx, encoded, total, fe, progress, status, start, output)
 
 	close(stopTicker)
 	return err

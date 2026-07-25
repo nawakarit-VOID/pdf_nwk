@@ -5,8 +5,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -360,46 +362,47 @@ func main() {
 
 	})
 
+	var cancelFunc context.CancelFunc
+
 	convertBtn := NewButtonWithIcon(tr, "Convert all to PDF", theme.MediaPlayIcon(), nil)
 	convertBtn.Importance = widget.HighImportance
 
-	convertBtn.OnTapped = func() {
+	resetConvertBtn := func() {
+		convertBtn.SetText(tr.T("Convert all to PDF"))
+		convertBtn.SetIcon(theme.MediaPlayIcon())
+		convertBtn.Enable()
+	}
+
+	startConversion := func(snapshot []*FolderEntry, outDir string) {
 		mu.Lock()
-		if converting {
-			mu.Unlock()
-			return
-		}
-		if len(folders) == 0 {
-			mu.Unlock()
-			dialog.ShowInformation("warn", "Please add the folder first.", w)
-			return
-		}
-		if outputDir == "" {
-			home, _ := os.UserHomeDir()
-			desktop := filepath.Join(home, "Desktop")
-			if _, err := os.Stat(desktop); err == nil {
-				outputDir = desktop
-			} else {
-				outputDir = home
-			}
-			outLabel.SetText("📁 " + outputDir)
-		}
-		snapshot := make([]*FolderEntry, len(folders))
-		copy(snapshot, folders)
-		outDir := outputDir
 		converting = true
 		mu.Unlock()
 
-		convertBtn.Disable()
-		globalProgress.SetValue(0)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancelFunc = cancel
+
+		fyne.Do(func() {
+			convertBtn.SetText("❌ Cancel")
+			convertBtn.SetIcon(theme.CancelIcon())
+			convertBtn.Enable()
+			globalProgress.SetValue(0)
+		})
 
 		go func() {
 			cores := runtime.NumCPU()
 			totalFolders := len(snapshot)
 			var errorMessages []string
 			hasError := false
+			canceled := false
 
 			for fi, fe := range snapshot {
+				select {
+				case <-ctx.Done():
+					canceled = true
+					break
+				default:
+				}
+
 				fe.mu.Lock()
 				for i := range fe.statuses {
 					fe.statuses[i] = "⏳ Wait"
@@ -437,8 +440,14 @@ func main() {
 					globalProgress.SetValue(float64(fi) / float64(totalFolders))
 				})
 
-				err = startPipeline(imgs, fe, globalProgress, statusLabel, cores, outPath, folderList)
+				err = startPipeline(ctx, imgs, fe, globalProgress, statusLabel, cores, outPath, folderList)
 				if err != nil {
+					if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+						canceled = true
+						fe.SetErrMsg("Canceled")
+						refreshList()
+						break
+					}
 					fe.SetErrMsg(err.Error())
 					refreshList()
 					hasError = true
@@ -455,8 +464,18 @@ func main() {
 			mu.Unlock()
 
 			fyne.Do(func() {
+				resetConvertBtn()
+			})
+
+			if canceled {
+				fyne.Do(func() {
+					statusLabel.SetText("❌ Conversion canceled")
+				})
+				return
+			}
+
+			fyne.Do(func() {
 				globalProgress.SetValue(1)
-				convertBtn.Enable()
 			})
 
 			if hasError {
@@ -473,6 +492,57 @@ func main() {
 				)
 			}
 		}()
+	}
+
+	convertBtn.OnTapped = func() {
+		mu.Lock()
+		if converting {
+			mu.Unlock()
+			if cancelFunc != nil {
+				cancelFunc()
+				statusLabel.SetText("❌ Canceling...")
+			}
+			return
+		}
+		if len(folders) == 0 {
+			mu.Unlock()
+			dialog.ShowInformation("warn", "Please add the folder first.", w)
+			return
+		}
+		if outputDir == "" {
+			home, _ := os.UserHomeDir()
+			desktop := filepath.Join(home, "Desktop")
+			if _, err := os.Stat(desktop); err == nil {
+				outputDir = desktop
+			} else {
+				outputDir = home
+			}
+			outLabel.SetText("📁 " + outputDir)
+		}
+		snapshot := make([]*FolderEntry, len(folders))
+		copy(snapshot, folders)
+		outDir := outputDir
+		mu.Unlock()
+
+		// Check for existing PDF files to warn user before overwriting
+		var existingFiles []string
+		for _, fe := range snapshot {
+			p := filepath.Join(outDir, fe.name+".pdf")
+			if _, err := os.Stat(p); err == nil {
+				existingFiles = append(existingFiles, fe.name+".pdf")
+			}
+		}
+
+		if len(existingFiles) > 0 {
+			msg := fmt.Sprintf("The following PDF file(s) already exist:\n- %s\n\nDo you want to overwrite them?", strings.Join(existingFiles, "\n- "))
+			dialog.ShowConfirm("⚠️ Overwrite Warning", msg, func(confirm bool) {
+				if confirm {
+					startConversion(snapshot, outDir)
+				}
+			}, w)
+		} else {
+			startConversion(snapshot, outDir)
+		}
 	}
 
 	abbtn := widget.NewButton("!", func() {

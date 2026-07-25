@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 // ─────────────────────────────────────────────
 
 func writePDF(
+	ctx context.Context,
 	in <-chan Encoded,
 	total int,
 	fe *FolderEntry,
@@ -44,6 +46,11 @@ func writePDF(
 	hasPages := false
 
 	for r := range in {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		buffer[r.index] = r
 		for {
 			res, ok := buffer[next]
@@ -112,6 +119,12 @@ func writePDF(
 				))
 			})
 		}
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
 	}
 
 	if !hasPages {
