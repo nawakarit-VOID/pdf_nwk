@@ -12,7 +12,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/widget"
-	"github.com/nfnt/resize"
+	"golang.org/x/image/draw"
 )
 
 // ─────────────────────────────────────────────
@@ -21,13 +21,13 @@ import (
 
 func startPipeline(
 	files []string,
-	statuses []string,
+	fe *FolderEntry,
 	progress *widget.ProgressBar,
 	status *widget.Label,
 	cores int,
 	output string,
 	fileList *widget.List,
-) {
+) error {
 
 	start := time.Now()
 	total := len(files)
@@ -68,15 +68,19 @@ func startPipeline(
 			for j := range jobs {
 				f, err := os.Open(j.path)
 				if err != nil {
+					decoded <- Img{index: j.index, img: nil, err: err}
+					fe.UpdateStatus(j.index, "❌ open error")
 					continue
 				}
 				img, _, err := image.Decode(f)
 				f.Close()
 				if err != nil {
+					decoded <- Img{index: j.index, img: nil, err: err}
+					fe.UpdateStatus(j.index, "❌ decode error")
 					continue
 				}
 				decoded <- Img{index: j.index, img: img}
-				updateStatus(j.index, "🔀 decoding", statuses)
+				fe.UpdateStatus(j.index, "🔀 decoding")
 			}
 		}()
 	}
@@ -87,12 +91,20 @@ func startPipeline(
 		go func() {
 			defer wgResize.Done()
 			for im := range decoded {
+				if im.err != nil {
+					resized <- im
+					continue
+				}
 				b := im.img.Bounds()
 				if b.Dx() > 2480 {
-					im.img = resize.Resize(2480, 0, im.img, resize.Bilinear)
+					newW := 2480
+					newH := int(float64(b.Dy()) * (2480.0 / float64(b.Dx())))
+					dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+					draw.BiLinear.Scale(dst, dst.Bounds(), im.img, b, draw.Over, nil)
+					im.img = dst
 				}
 				resized <- im
-				updateStatus(im.index, "↔️ resizing", statuses)
+				fe.UpdateStatus(im.index, "↔️ resizing")
 			}
 		}()
 	}
@@ -103,9 +115,18 @@ func startPipeline(
 		go func() {
 			defer wgEncode.Done()
 			for im := range resized {
+				if im.err != nil {
+					encoded <- Encoded{index: im.index, err: im.err}
+					continue
+				}
 				buf := jpegPool.Get().(*bytes.Buffer)
 				buf.Reset()
-				encodeJPEG(buf, im.img)
+				err := encodeJPEG(buf, im.img)
+				if err != nil {
+					encoded <- Encoded{index: im.index, err: err}
+					fe.UpdateStatus(im.index, "❌ encode error")
+					continue
+				}
 				b := im.img.Bounds()
 				encoded <- Encoded{
 					index: im.index,
@@ -113,7 +134,7 @@ func startPipeline(
 					w:     float64(b.Dx()) * 0.264583,
 					h:     float64(b.Dy()) * 0.264583,
 				}
-				updateStatus(im.index, "🔄 encoding", statuses)
+				fe.UpdateStatus(im.index, "🔄 encoding")
 			}
 		}()
 	}
@@ -131,7 +152,8 @@ func startPipeline(
 	go func() { wgResize.Wait(); close(resized) }()
 	go func() { wgEncode.Wait(); close(encoded) }()
 
-	writePDF(encoded, total, statuses, progress, status, start, output) //, fileList)
+	err := writePDF(encoded, total, fe, progress, status, start, output)
 
 	close(stopTicker)
+	return err
 }

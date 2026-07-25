@@ -6,48 +6,28 @@ package main
 import (
 	"bytes"
 	"embed"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	_ "image/gif"
-	_ "image/jpeg"
+	"image/jpeg"
 	_ "image/png"
-
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 
-	_ "golang.org/x/image/bmp"
-	_ "golang.org/x/image/tiff"
-	_ "golang.org/x/image/webp"
-
-	_ "golang.org/x/image/bmp"
-	_ "golang.org/x/image/tiff"
-	_ "golang.org/x/image/webp"
-
-	_ "image/gif"
-	"image/jpeg"
-	_ "image/jpeg"
-	_ "image/png"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-
-	"os/exec"
-
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -65,15 +45,18 @@ type Job struct {
 type Img struct {
 	index int
 	img   image.Image
+	err   error
 }
 
 type Encoded struct {
 	index int
 	buf   *bytes.Buffer
 	w, h  float64
+	err   error
 }
 
 type FolderEntry struct {
+	mu       sync.RWMutex
 	path     string
 	name     string
 	imgCount int
@@ -82,9 +65,29 @@ type FolderEntry struct {
 	errMsg   string
 }
 
-// encodeJPEG เข้ารหัสภาพเป็น JPEG quality 100 ลงใน buffer
-func encodeJPEG(buf *bytes.Buffer, img image.Image) {
-	jpeg.Encode(buf, img, &jpeg.Options{Quality: 100}) //nolint:errcheck
+func (fe *FolderEntry) UpdateStatus(index int, status string) {
+	fe.mu.Lock()
+	defer fe.mu.Unlock()
+	if index >= 0 && index < len(fe.statuses) {
+		fe.statuses[index] = status
+	}
+}
+
+func (fe *FolderEntry) SetDone(done bool) {
+	fe.mu.Lock()
+	defer fe.mu.Unlock()
+	fe.done = done
+}
+
+func (fe *FolderEntry) SetErrMsg(msg string) {
+	fe.mu.Lock()
+	defer fe.mu.Unlock()
+	fe.errMsg = msg
+}
+
+// encodeJPEG เข้ารหัสภาพเป็น JPEG quality 95 ลงใน buffer เพื่อประสิทธิภาพและขนาดไฟล์ที่ดีขึ้น
+func encodeJPEG(buf *bytes.Buffer, img image.Image) error {
+	return jpeg.Encode(buf, img, &jpeg.Options{Quality: 95})
 }
 
 // ─────────────────────────────────────────────
@@ -122,12 +125,6 @@ func collectImages(dir string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
-}
-
-func updateStatus(index int, status string, statuses []string) {
-	if index >= 0 && index < len(statuses) {
-		statuses[index] = status
-	}
 }
 
 func openFolder(path string) {
@@ -248,20 +245,28 @@ func main() {
 				fmt.Sprintf("%s  [%d image]", e.name, e.imgCount),
 			)
 			var st string
+			e.mu.RLock()
+			errMsg := e.errMsg
+			done := e.done
+			statusesCopy := make([]string, len(e.statuses))
+			copy(statusesCopy, e.statuses)
+			imgCount := e.imgCount
+			e.mu.RUnlock()
+
 			switch {
-			case e.errMsg != "":
-				st = "❌ " + e.errMsg
-			case e.done:
+			case errMsg != "":
+				st = "❌ " + errMsg
+			case done:
 				st = "✅ Done"
 			default:
 				n := 0
-				for _, s := range e.statuses {
+				for _, s := range statusesCopy {
 					if strings.HasPrefix(s, "✅") {
 						n++
 					}
 				}
 				if n > 0 {
-					st = fmt.Sprintf("🔄 %d/%d", n, e.imgCount)
+					st = fmt.Sprintf("🔄 %d/%d", n, imgCount)
 				} else {
 					st = "⏳ Wait"
 				}
@@ -391,26 +396,36 @@ func main() {
 		go func() {
 			cores := runtime.NumCPU()
 			totalFolders := len(snapshot)
+			var errorMessages []string
+			hasError := false
 
 			for fi, fe := range snapshot {
+				fe.mu.Lock()
 				for i := range fe.statuses {
 					fe.statuses[i] = "⏳ Wait"
 				}
 				fe.done = false
 				fe.errMsg = ""
+				fe.mu.Unlock()
 				refreshList()
 
 				imgs, err := collectImages(fe.path)
 				if err != nil || len(imgs) == 0 {
-					fe.errMsg = "images not found"
+					fe.SetErrMsg("images not found")
 					refreshList()
+					hasError = true
+					errorMessages = append(errorMessages, fmt.Sprintf("%s: images not found", fe.name))
 					continue
 				}
-				fe.statuses = make([]string, len(imgs))
-				for i := range fe.statuses {
-					fe.statuses[i] = "⏳ Wait"
+
+				st := make([]string, len(imgs))
+				for i := range st {
+					st[i] = "⏳ Wait"
 				}
+				fe.mu.Lock()
+				fe.statuses = st
 				fe.imgCount = len(imgs)
+				fe.mu.Unlock()
 
 				outPath := filepath.Join(outDir, fe.name+".pdf")
 
@@ -422,9 +437,16 @@ func main() {
 					globalProgress.SetValue(float64(fi) / float64(totalFolders))
 				})
 
-				startPipeline(imgs, fe.statuses, globalProgress, statusLabel, cores, outPath, folderList)
+				err = startPipeline(imgs, fe, globalProgress, statusLabel, cores, outPath, folderList)
+				if err != nil {
+					fe.SetErrMsg(err.Error())
+					refreshList()
+					hasError = true
+					errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", fe.name, err))
+					continue
+				}
 
-				fe.done = true
+				fe.SetDone(true)
 				refreshList()
 			}
 
@@ -437,15 +459,19 @@ func main() {
 				convertBtn.Enable()
 			})
 
-			dialog.ShowConfirm(
-				"✅ Finish!",
-				fmt.Sprintf("Convert %d folder finished 🎉\n\nopen folder ?", totalFolders),
-				func(open bool) {
-					if open {
-						openFolder(outDir)
-					}
-				}, w,
-			)
+			if hasError {
+				dialog.ShowError(fmt.Errorf("Some folders failed to convert:\n%s", strings.Join(errorMessages, "\n")), w)
+			} else {
+				dialog.ShowConfirm(
+					"✅ Finish!",
+					fmt.Sprintf("Convert %d folder finished 🎉\n\nopen folder ?", totalFolders),
+					func(open bool) {
+						if open {
+							openFolder(outDir)
+						}
+					}, w,
+				)
+			}
 		}()
 	}
 

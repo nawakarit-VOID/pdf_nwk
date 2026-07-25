@@ -23,13 +23,12 @@ import (
 func writePDF(
 	in <-chan Encoded,
 	total int,
-	statuses []string,
+	fe *FolderEntry,
 	progress *widget.ProgressBar,
 	status *widget.Label,
 	start time.Time,
 	output string,
-	//fileList *widget.List,
-) {
+) error {
 
 	// ใช้ custom size — จะกำหนด page size ต่อหน้าตามขนาดภาพจริง
 	pdf := gofpdf.NewCustom(&gofpdf.InitType{
@@ -42,6 +41,7 @@ func writePDF(
 	buffer := map[int]Encoded{}
 	next := 0
 	done := 0
+	hasPages := false
 
 	for r := range in {
 		buffer[r.index] = r
@@ -52,11 +52,35 @@ func writePDF(
 			}
 			delete(buffer, next)
 
+			if res.err != nil {
+				fe.UpdateStatus(next, "❌ failed")
+				next++
+				done++
+
+				elapsed := time.Since(start).Seconds()
+				var speed, eta float64
+				if elapsed > 0 {
+					speed = float64(done) / elapsed
+					per := elapsed / float64(done)
+					eta = per * float64(total-done)
+				}
+
+				fyne.Do(func() {
+					progress.SetValue(float64(done) / float64(total))
+					status.SetText(fmt.Sprintf(
+						"🔀 %d / %d images   🎨 %.1f img/s   ⏱ ETA %.1fs",
+						done, total, speed, eta,
+					))
+				})
+				continue
+			}
+
 			imgW := res.w // mm (pixel * 0.264583 @ 96dpi)
 			imgH := res.h
 
 			// เพิ่มหน้าที่มีขนาดเท่ากับภาพพอดี — ไม่มีขอบขาว
 			pdf.AddPageFormat("P", gofpdf.SizeType{Wd: imgW, Ht: imgH})
+			hasPages = true
 
 			name := fmt.Sprintf("img%d", next)
 			opt := gofpdf.ImageOptions{ImageType: "JPG"}
@@ -67,15 +91,18 @@ func writePDF(
 
 			jpegPool.Put(res.buf)
 
-			updateStatus(next, "✅ done", statuses)
+			fe.UpdateStatus(next, "✅ done")
 
 			next++
 			done++
 
 			elapsed := time.Since(start).Seconds()
-			speed := float64(done) / elapsed
-			per := elapsed / float64(done)
-			eta := per * float64(total-done)
+			var speed, eta float64
+			if elapsed > 0 {
+				speed = float64(done) / elapsed
+				per := elapsed / float64(done)
+				eta = per * float64(total-done)
+			}
 
 			fyne.Do(func() {
 				progress.SetValue(float64(done) / float64(total))
@@ -87,7 +114,14 @@ func writePDF(
 		}
 	}
 
-	pdf.OutputFileAndClose(output)
+	if !hasPages {
+		return fmt.Errorf("no valid images to write to PDF")
+	}
+
+	err := pdf.OutputFileAndClose(output)
+	if err != nil {
+		return err
+	}
 
 	fyne.Do(func() {
 		elapsed := time.Since(start).Seconds()
@@ -96,4 +130,5 @@ func writePDF(
 			total, elapsed, float64(total)/elapsed,
 		))
 	})
+	return nil
 }
