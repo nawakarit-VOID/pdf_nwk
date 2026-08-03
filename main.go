@@ -463,32 +463,28 @@ func main() {
 
 			fyne.Do(func() {
 				resetConvertBtn()
-			})
 
-			if canceled {
-				fyne.Do(func() {
+				if canceled {
 					statusLabel.SetText("❌ Conversion canceled")
-				})
-				return
-			}
+					return
+				}
 
-			fyne.Do(func() {
 				globalProgress.SetValue(1)
-			})
 
-			if hasError {
-				dialog.ShowError(fmt.Errorf("Some folders failed to convert:\n%s", strings.Join(errorMessages, "\n")), w)
-			} else {
-				dialog.ShowConfirm(
-					"✅ Finish!",
-					fmt.Sprintf("Convert %d folder finished 🎉\n\nopen folder ?", totalFolders),
-					func(open bool) {
-						if open {
-							openFolder(outDir)
-						}
-					}, w,
-				)
-			}
+				if hasError {
+					dialog.ShowError(fmt.Errorf("Some folders failed to convert:\n%s", strings.Join(errorMessages, "\n")), w)
+				} else {
+					dialog.ShowConfirm(
+						"✅ Finish!",
+						fmt.Sprintf("Convert %d folder finished 🎉\n\nopen folder ?", totalFolders),
+						func(open bool) {
+							if open {
+								openFolder(outDir)
+							}
+						}, w,
+					)
+				}
+			})
 		}()
 	}
 
